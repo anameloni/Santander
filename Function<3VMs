@@ -1,0 +1,89 @@
+🧭 1) Azure Resource Graph: listar todos os Function Apps do tenant
+Execute no Azure CLI ou no portal (Resource Graph Explorer):
+
+kusto
+resources
+| where type == "microsoft.web/sites"
+| where kind contains "functionapp"
+| project name, resourceGroup, subscriptionId, location, id
+Isso retorna todos os Function Apps em todas as assinaturas às quais você tem acesso.
+
+📊 2) Consultar a métrica FunctionAppInstances para cada Function App
+A métrica relevante é:
+
+Namespace: Microsoft.Web/sites
+
+Métrica: FunctionAppInstances
+
+Agregação recomendada: Maximum ou Average
+
+Intervalo: últimos 5–15 minutos
+
+Exemplo usando Azure CLI:
+
+bash
+az monitor metrics list \
+  --resource "<RESOURCE_ID_DO_FUNCTION_APP>" \
+  --metric "FunctionAppInstances" \
+  --interval PT5M \
+  --aggregation Maximum \
+  --query "value[0].timeseries[0].data[-1].maximum"
+🛠️ 3) Script completo: todas as assinaturas + filtro ≤ 3 instâncias
+Este script percorre todas as assinaturas, lista todos os Function Apps e consulta a métrica de instâncias:
+
+PowerShell (mais usado para automação cross-subscription)
+powershell
+$subs = az account list --query "[].id" -o tsv
+
+foreach ($sub in $subs) {
+    az account set --subscription $sub
+
+    $apps = az functionapp list --query "[].{name:name, rg:resourceGroup, id:id}" | ConvertFrom-Json
+
+    foreach ($app in $apps) {
+        $metric = az monitor metrics list `
+            --resource $app.id `
+            --metric "FunctionAppInstances" `
+            --interval PT5M `
+            --aggregation Maximum `
+            --query "value[0].timeseries[0].data[-1].maximum" `
+            -o tsv
+
+        if ($metric -le 3) {
+            Write-Output "FunctionApp '$($app.name)' (sub: $sub) está com $metric instâncias"
+        }
+    }
+}
+Esse script produz exatamente a lista que você quer.
+
+📡 4) Alternativa: Log Analytics (se todos os Function Apps enviam logs)
+Se você tem um workspace centralizado, pode identificar instâncias por cloud_RoleInstance.
+
+Consulta:
+
+kusto
+traces
+| where cloud_RoleInstance != ""
+| summarize instancias = dcount(cloud_RoleInstance) by appName = cloud_RoleName
+| where instancias <= 3
+Isso funciona mesmo em ambientes com dezenas de assinaturas, desde que todos enviem logs para o mesmo workspace.
+
+🧩 5) Alternativa: Dashboard unificado no Azure Monitor
+Você pode criar um dashboard que:
+
+Lista todos os Function Apps (via ARG)
+
+Consulta métricas (via Azure Monitor)
+
+Aplica filtro ≤ 3 instâncias
+
+Essa abordagem é útil para times de operação.
+
+🔍 Considerações importantes
+A métrica é por Function App, não por função individual.
+
+Em planos Premium, o número mínimo de instâncias é configurável.
+
+Em Consumption, o número pode variar rapidamente — use janelas curtas (5–10 min).
+
+Para auditoria histórica, use agregações diárias no Azure Monitor.
