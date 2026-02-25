@@ -22,6 +22,34 @@ Identifica:
 - Functions con menos uso
 - Ranking de subutilización
 
+let execs =
+customMetrics
+| where name == "FunctionExecutionCount"
+| where TimeGenerated > ago(30d)
+| summarize ExecCount = sum(value)
+          by _Workspace, FunctionApp = cloud_RoleName,
+             FunctionName = tostring(customDimensions.FunctionName);
+
+let durations =
+customMetrics
+| where name == "FunctionExecutionUnits"
+| where TimeGenerated > ago(30d)
+| summarize Duration = sum(value)
+          by _Workspace, FunctionApp = cloud_RoleName,
+             FunctionName = tostring(customDimensions.FunctionName);
+
+execs
+| join kind=leftouter durations on _Workspace, FunctionApp, FunctionName
+| extend Duration = coalesce(Duration, 0.0)
+| extend Recommendation = case(
+    ExecCount == 0,                       "❌ Probablemente obsoleta, revisar",
+    ExecCount < 10 and Duration < 200,    "⬇️ Migrar a Consumption",
+    ExecCount < 20,                       "⚠️ Candidata a consolidación",
+    Duration < 100,                       "ℹ️ Considerar Logic Apps/Event Grid",
+                                          "✔ Mantener en Premium Plan"
+  )
+| project _Workspace, FunctionApp, FunctionName, ExecCount, Duration, Recommendation
+| order by ExecCount asc
 
 🟦 📌 3. Consulta 2 — Última ejecución por Function
 union withsource=Workspace *
