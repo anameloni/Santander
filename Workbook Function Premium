@@ -1,0 +1,184 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 9,
+      "name": "Parameters",
+      "visible": true,
+      "json": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          {
+            "id": "workspaces",
+            "version": "KqlParameter/1.0",
+            "name": "workspaces",
+            "type": "resourcePicker",
+            "label": "Selecciona los Log Analytics Workspaces",
+            "resourceType": "microsoft.operationalinsights/workspaces",
+            "multiSelect": true,
+            "required": true
+          },
+          {
+            "id": "functionApp",
+            "version": "KqlParameter/1.0",
+            "name": "functionApp",
+            "type": "text",
+            "label": "Filtrar Function App (opcional)",
+            "description": "Introduce el nombre de la Function App para filtrar (o dejar vacío)"
+          },
+          {
+            "id": "days",
+            "version": "KqlParameter/1.0",
+            "name": "days",
+            "type": "dropdown",
+            "label": "Rango de tiempo",
+            "value": "30",
+            "items": [
+              { "label": "7 días", "value": "7" },
+              { "label": "30 días", "value": "30" },
+              { "label": "90 días", "value": "90" }
+            ]
+          }
+        ],
+        "style": "horizontal"
+      }
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": {
+          "style": "info",
+          "markdown": "## 🌐 Azure Functions — Health Overview (Multi‑Suscripción / Multi‑Workspace)\nPanel global con KPIs, funciones subutilizadas, última ejecución, heatmaps, coste desaprovechado y recomendaciones automáticas."
+        }
+      }
+    },
+    {
+      "type": 3,
+      "name": "KPIs Globales",
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": {
+          "fromTemplateId": "la",
+          "query": "union withsource=Workspace *\n| where Type == \"customMetrics\"\n| where TimeGenerated > ago({{days}}d)\n| where cloud_RoleName contains {{functionApp}} or isempty({{functionApp}})\n| summarize TotalExecutions=sum(Val), FunctionApps=dcount(cloud_RoleName), Functions=dcount(customDimensions.FunctionName)"
+        },
+        "dataSource": "AzureMonitor",
+        "visualization": "tiles",
+        "tileSettings": {
+          "titleContent": {
+            "columnMatch": "TotalExecutions",
+            "formatter": "count",
+            "label": "Total Ejecuciones"
+          },
+          "leftTitle": "KPIs Globales"
+        },
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "resources": ["{{workspaces}}"]
+      }
+    },
+    {
+      "type": 3,
+      "name": "Functions Subutilizadas",
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": {
+          "fromTemplateId": "la",
+          "query": "union withsource=Workspace *\n| where Type == \"customMetrics\"\n| where name == \"FunctionExecutionCount\"\n| where TimeGenerated > ago({{days}}d)\n| where cloud_RoleName contains {{functionApp}} or isempty({{functionApp}})\n| summarize TotalExecutions=sum(Val) by Workspace, FunctionApp=cloud_RoleName, FunctionName=tostring(customDimensions.FunctionName)\n| order by TotalExecutions asc\n| take 30"
+        },
+        "dataSource": "AzureMonitor",
+        "visualization": "table",
+        "title": "🔽 Top Functions con Menor Uso (Subutilizadas)",
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "resources": ["{{workspaces}}"]
+      }
+    },
+    {
+      "type": 3,
+      "name": "Última Ejecución",
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": {
+          "fromTemplateId": "la",
+          "query": "union withsource=Workspace *\n| where Type == \"traces\"\n| where customDimensions.EventName == \"FunctionCompleted\"\n| where cloud_RoleName contains {{functionApp}} or isempty({{functionApp}})\n| summarize LastExecution=max(TimeGenerated) by Workspace, FunctionApp=cloud_RoleName, FunctionName=customDimensions.FunctionName\n| order by LastExecution asc"
+        },
+        "dataSource": "AzureMonitor",
+        "visualization": "table",
+        "title": "⏱️ Última Ejecución por Function",
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "resources": ["{{workspaces}}"]
+      }
+    }
+  ],
+  "fallbackResourceIds": [
+,
+    {
+      "type": 3,
+      "name": "Heatmap de Actividad",
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": {
+          "fromTemplateId": "la",
+          "query": "union withsource=Workspace *\n| where Type == \"customMetrics\"\n| where name == \"FunctionExecutionCount\"\n| where TimeGenerated > ago({{days}}d)\n| where cloud_RoleName contains {{functionApp}} or isempty({{functionApp}})\n| extend hour = datetime_part('hour', TimeGenerated)\n| extend day = startofday(TimeGenerated)\n| summarize TotalExecutions=sum(Val) by day, hour\n| order by day asc"
+        },
+        "visualization": "heatmap",
+        "title": "🔥 Heatmap de Actividad (Día vs Hora)",
+        "dataSource": "AzureMonitor",
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "resources": ["{{workspaces}}"],
+        "size": 2
+      }
+    },
+
+    {
+      "type": 3,
+      "name": "Score de Subutilización",
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": {
+          "fromTemplateId": "la",
+          "query": "let execs = union withsource=Workspace * | where Type == \"customMetrics\" | where name == \"FunctionExecutionCount\" | where TimeGenerated > ago({{days}}d) | summarize ExecCount=sum(Val) by Workspace, FunctionApp=cloud_RoleName, FunctionName=tostring(customDimensions.FunctionName);\nlet units = union withsource=Workspace * | where Type == \"customMetrics\" | where name == \"FunctionExecutionUnits\" | where TimeGenerated > ago({{days}}d) | summarize ExecUnits=sum(Val) by Workspace, FunctionApp=cloud_RoleName, FunctionName=tostring(customDimensions.FunctionName);\nexecs\n| join kind=leftouter units on Workspace, FunctionApp, FunctionName\n| extend UtilizationScore = coalesce(ExecCount,0) + coalesce(ExecUnits,0)\n| order by UtilizationScore asc"
+        },
+        "visualization": "bar",
+        "title": "📉 Ranking por Score de Subutilización",
+        "dataSource": "AzureMonitor",
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "resources": ["{{workspaces}}"],
+        "size": 1
+      }
+    },
+
+    {
+      "type": 3,
+      "name": "Coste Desaprovechado del Premium Plan",
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": {
+          "fromTemplateId": "la",
+          "query": "let costEP1 = 0.221; let costEP2 = 0.442; let costEP3 = 0.883;\nlet execs = union withsource=Workspace * | where Type == \"customMetrics\" | where name == \"FunctionExecutionCount\" | where TimeGenerated > ago({{days}}d) | summarize ExecCount=sum(Val) by Workspace, FunctionApp=cloud_RoleName;\nlet cpuidle = union withsource=Workspace * | where Type == \"Perf\" | where CounterName == \"CPU Usage\" | summarize AvgCPU=avg(CounterValue) by Workspace, FunctionApp=InstanceName;\nlet plan = union withsource=Workspace * | where Type == \"AppServicePlanMetrics\" | summarize avg(InstanceCount) by Workspace, PlanName;\nexecs\n| join kind=leftouter cpuidle on Workspace, FunctionApp\n| join kind=leftouter plan on Workspace\n| extend IdleHours = iif(AvgCPU < 5, {{days}} * 24, ({{days}}*24) * (1-AvgCPU/100))\n| extend PlanCost = iif(PlanName contains \"EP1\", costEP1, iif(PlanName contains \"EP2\", costEP2, costEP3))\n| extend WastedCost = IdleHours * PlanCost\n| project Workspace, FunctionApp, PlanName, AvgCPU, IdleHours, WastedCost\n| order by WastedCost desc"
+        },
+        "visualization": "table",
+        "title": "💰 Estimación de Coste Desaprovechado (Premium Plan)",
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "resources": ["{{workspaces}}"],
+        "size": 2
+      }
+    },
+
+    {
+      "type": 3,
+      "name": "Recomendación Automática",
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": {
+          "fromTemplateId": "la",
+          "query": "let execs = union withsource=Workspace * | where Type == \"customMetrics\" | where name == \"FunctionExecutionCount\" | where TimeGenerated > ago({{days}}d) | summarize ExecCount=sum(Val) by Workspace, FunctionApp=cloud_RoleName, FunctionName=tostring(customDimensions.FunctionName);\nlet duration = union withsource=Workspace * | where Type == \"customMetrics\" | where name == \"FunctionExecutionUnits\" | summarize Duration=sum(Val) by Workspace, FunctionApp=cloud_RoleName, FunctionName=tostring(customDimensions.FunctionName);\nexecs\n| join kind=leftouter duration on Workspace, FunctionApp, FunctionName\n| extend Recommendation = case(\n    ExecCount == 0, \"❌ Function posiblemente obsoleta (no ejecuciones)\",\n    ExecCount < 10 and Duration < 200, \"⬇️ Migrar a Consumption (uso extremadamente bajo)\",\n    ExecCount < 20, \"⚠️ Considerar consolidación o migración\",\n    Duration < 100, \"ℹ️ Función muy ligera → evaluar mover a LogicApp/EventGrid\",\n    \"✔ Mantener en Premium Plan\"\n  )\n| project Workspace, FunctionApp, FunctionName, ExecCount, Duration, Recommendation"
+        },
+        "visualization": "table",
+        "title": "🤖 Recomendación Automática por Function",
+        "dataSource": "AzureMonitor",
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "resources": ["{{workspaces}}"],
+        "size": 2
+      }
+    }
+  ]
+}
