@@ -1,0 +1,165 @@
+🟦 📌 1. Cómo ejecutar en Azure Monitor Logs (paso muy importante)
+
+- Ve a: Azure Portal → Azure Monitor → Logs
+- En la parte superior, haz clic en: Select Scope → Workspaces
+
+Selecciona todos los workspaces donde tus Function Apps escriben telemetría.
+👉 Ya puedes ejecutar cualquier consulta del paquete.
+
+🟩 📌 2. Consulta 1 — Functions subutilizadas (ejecuciones bajas)
+union withsource=Workspace *
+| where Type == "customMetrics"
+| where name == "FunctionExecutionCount"
+| where TimeGenerated > ago(30d)
+| summarize TotalExecutions = sum(Val) 
+    by Workspace, 
+       FunctionApp = cloud_RoleName, 
+       FunctionName = tostring(customDimensions.FunctionName)
+| order by TotalExecutions asc
+
+Identifica:
+- Functions con cero ejecuciones
+- Functions con menos uso
+- Ranking de subutilización
+
+
+🟦 📌 3. Consulta 2 — Última ejecución por Function
+union withsource=Workspace *
+| where Type == "traces"
+| where customDimensions.EventName == "FunctionCompleted"
+| summarize LastExecution = max(TimeGenerated) 
+    by Workspace, 
+       FunctionApp=cloud_RoleName, 
+       FunctionName=customDimensions.FunctionName
+| order by LastExecution asc
+
+Identifica:
+- Functions obsoletas
+- Functions no llamadas en semanas
+- Problemas de integración
+
+
+🟩 📌 4. Consulta 3 — Score de subutilización (ejecuciones + unidades)
+let execs = union withsource=Workspace *
+| where Type == "customMetrics"
+| where name == "FunctionExecutionCount"
+| summarize ExecCount = sum(Val) by Workspace, FunctionApp=cloud_RoleName, FunctionName=tostring(customDimensions.FunctionName);
+
+let units = union withsource=Workspace *
+| where Type == "customMetrics"
+| where name == "FunctionExecutionUnits"
+| summarize ExecUnits = sum(Val) by Workspace, FunctionApp=cloud_RoleName, FunctionName=tostring(customDimensions.FunctionName);
+
+execs
+| join kind=leftouter units on Workspace, FunctionApp, FunctionName
+| extend UtilizationScore = coalesce(ExecCount,0) + coalesce(ExecUnits,0)
+| order by UtilizationScore asc
+
+Te devuelve:
+- Ranking de functions peor aprovechadas
+- Score numerado de “sub‑uso”
+
+
+🟦 📌 5. Consulta 4 — Heatmap de actividad (hora vs día)
+union withsource=Workspace *
+| where Type == "customMetrics"
+| where name == "FunctionExecutionCount"
+| where TimeGenerated > ago(30d)
+| extend hour = datetime_part("hour", TimeGenerated)
+| extend day = startofday(TimeGenerated)
+| summarize Count = sum(Val) by day, hour
+| order by day asc
+
+En Azure Monitor Logs → Visualization → Heatmap
+
+Ideal para ver:
+- Horas de mayor uso
+- Horas muertas
+- Días con cero actividad
+
+
+🟩 📌 6. Consulta 5 — Coste desaprovechado del Premium Plan
+
+Nota: Esta es una estimación basada en idle CPU y el costo por instancia.
+
+let costEP1 = 0.221;
+let costEP2 = 0.442;
+let costEP3 = 0.883;
+
+let execs = union withsource=Workspace *
+| where Type == "customMetrics"
+| where name == "FunctionExecutionCount"
+| where TimeGenerated > ago(30d)
+| summarize ExecCount = sum(Val) by Workspace, FunctionApp=cloud_RoleName;
+
+let cpuidle = union withsource=Workspace *
+| where Type == "Perf"
+| where CounterName == "CPU Usage"
+| summarize AvgCPU=avg(CounterValue) by Workspace, FunctionApp=InstanceName;
+
+let plan = union withsource=Workspace *
+| where Type == "AppServicePlanMetrics"
+| summarize avg(InstanceCount) by Workspace, PlanName;
+
+execs
+| join kind=leftouter cpuidle on Workspace, FunctionApp
+| join kind=leftouter plan on Workspace
+| extend IdleHours = iif(AvgCPU < 5, 30*24, (30*24) * (1-AvgCPU/100))
+| extend PlanCost = iif(PlanName contains "EP1", costEP1, iif(PlanName contains "EP2", costEP2, costEP3))
+| extend WastedCost = IdleHours * PlanCost
+| project Workspace, FunctionApp, PlanName, AvgCPU, IdleHours, WastedCost
+| order by WastedCost desc
+
+Resultados:
+- Coste idle por Function App
+- Candidato #1 para optimización
+
+
+🟦 📌 7. Consulta 6 — Recomendación Automática por Function 🤖
+let execs = union withsource=Workspace *
+| where Type == "customMetrics"
+| where name == "FunctionExecutionCount"
+| where TimeGenerated > ago(30d)
+| summarize ExecCount = sum(Val) by Workspace, FunctionApp=cloud_RoleName, FunctionName=tostring(customDimensions.FunctionName);
+
+let durations = union withsource=Workspace *
+| where Type == "customMetrics"
+| where name == "FunctionExecutionUnits"
+| summarize Duration = sum(Val) by Workspace, FunctionApp=cloud_RoleName, FunctionName=tostring(customDimensions.FunctionName);
+
+execs
+| join kind=leftouter durations on Workspace, FunctionApp, FunctionName
+| extend Recommendation = case(
+    ExecCount == 0, "❌ Probablemente obsoleta, revisar",
+    ExecCount < 10 and Duration < 200, "⬇️ Migrar a Consumption",
+    ExecCount < 20, "⚠️ Candidata a consolidación",
+    Duration < 100, "ℹ️ Considerar Logic Apps/Event Grid",
+    "✔ Mantener en Premium Plan"
+  )
+| project Workspace, FunctionApp, FunctionName, ExecCount, Duration, Recommendation
+| order by ExecCount asc
+
+🟦 📊 8. Plantilla para Excel
+Campos sugeridos:
+- Workspace
+- FunctionApp
+- FunctionName
+- ExecCount
+- ExecUnits
+- LastExecution
+- ScoreWasted
+- CostRecommendation
+
+Cada consulta exportada desde Logs → Export to CSV llena una parte.
+
+
+🟦 📈 9. Plantilla para Power BI
+
+1. En Azure Monitor Logs → Export to Power BI (M Query)
+2. Copia el conector
+3. Repite para:
+- Functions subutilizadas
+- Score
+- Coste
+- Recomendaciones
+4. Combina en Power BI.
