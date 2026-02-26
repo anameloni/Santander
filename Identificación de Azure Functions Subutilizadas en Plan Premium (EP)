@@ -1,0 +1,273 @@
+Se propone una arquitectura de observabilidad cross-subscription que combina:
+
+Azure Resource Graph (ARG) → Inventario global.
+Log Analytics (cross-workspace KQL) → Métricas técnicas.
+Modelo de scoring FinOps → Clasificación y estimación de ahorro.
+Workbook / Power BI + Automatización mensual → Informe continuo.
+
+El resultado es un ranking tenant-wide que identifica:
+
+Functions subutilizadas críticas
+Oportunidades de optimización
+Ahorro mensual estimado
+2️⃣ Arquitectura de Análisis a Nivel Tenant
+🔎 2.1 Inventario Global
+
+Usar Azure Resource Graph para descubrir:
+
+Todas las Microsoft.Web/sites donde kind contains "functionapp"
+Filtrar por App Service Plan Premium (EP1, EP2, EP3)
+Obtener relación Function App ↔ App Service Plan ↔ Subscription
+📊 2.2 Recolección de Métricas Cross-Workspace
+
+Opciones:
+
+Opción A (Recomendada - Enterprise)
+
+Centralizar diagnóstico en:
+
+Un Log Analytics Workspace central
+Configurar Diagnostic Settings para:
+AzureMetrics
+AppServiceHTTPLogs
+FunctionAppLogs
+PerformanceCounters
+Opción B (Sin centralización)
+
+Usar KQL cross-workspace:
+
+Kql
+
+union withsource=WorkspaceName
+workspace("workspace1").requests,
+workspace("workspace2").requests,
+workspace("workspace3").requests
+
+
+Automatizable con:
+
+Azure CLI
+PowerShell
+Script dinámico consultando workspaces desde ARG
+3️⃣ Query Azure Resource Graph (Inventario Premium)
+
+Kql
+
+Resources
+| where type == "microsoft.web/sites"
+| where kind contains "functionapp"
+| extend serverFarmId = tostring(properties.serverFarmId)
+| join kind=leftouter (
+    Resources
+    | where type == "microsoft.web/serverfarms"
+    | project serverFarmId = id,
+              sku = tostring(sku.name),
+              tier = tostring(sku.tier),
+              capacity = tostring(sku.capacity)
+) on serverFarmId
+| where tier contains "Premium"
+| project
+    subscriptionId,
+    resourceGroup,
+    functionName = name,
+    location,
+    sku,
+    capacity,
+    serverFarmId
+| order by subscriptionId asc
+
+4️⃣ Métricas Técnicas – Queries KQL
+✅ 4.1 Execution Count por día (30 / 90 días)
+
+Kql
+
+requests
+| where timestamp > ago(30d)
+| summarize ExecutionCount = count() by bin(timestamp, 1d), cloud_RoleName
+| summarize
+    AvgPerDay = avg(ExecutionCount),
+    MaxPerDay = max(ExecutionCount),
+    ActiveDays = dcount(timestamp)
+by cloud_RoleName
+| extend SporadicUsage = iff(ActiveDays < 10, "Yes", "No")
+| order by AvgPerDay asc
+
+✅ 4.2 CPU Promedio y Máximo
+
+Kql
+
+AzureMetrics
+| where TimeGenerated > ago(30d)
+| where MetricName == "CpuPercentage"
+| summarize
+    AvgCPU = avg(Average),
+    MaxCPU = max(Maximum)
+by Resource
+| order by AvgCPU asc
+
+✅ 4.3 Memory Working Set
+
+Kql
+
+performanceCounters
+| where timestamp > ago(30d)
+| where counterName == "Working Set"
+| summarize
+    AvgMemoryMB = avg(counterValue) / 1024 / 1024,
+    MaxMemoryMB = max(counterValue) / 1024 / 1024
+by cloud_RoleName
+
+✅ 4.4 Instancias Activas
+
+Kql
+
+AzureMetrics
+| where MetricName == "InstanceCount"
+| summarize
+    AvgInstances = avg(Average),
+    MaxInstances = max(Maximum)
+by Resource
+
+✅ 4.5 Heatmap Horario
+
+Kql
+
+requests
+| where timestamp > ago(30d)
+| summarize Executions=count() by cloud_RoleName, hourofday(timestamp)
+| render heatmap
+
+✅ 4.6 Functions activas sin tráfico externo
+
+Kql
+
+requests
+| where timestamp > ago(30d)
+| summarize TotalRequests=count() by cloud_RoleName
+| where TotalRequests == 0
+
+
+Cruzar con métricas de CPU > 0 para detectar procesos internos.
+
+5️⃣ Modelo de Scoring (FinOps)
+🎯 Variables
+Métrica	Peso
+Avg ejecuciones/día	30%
+Avg CPU %	25%
+Memoria promedio	15%
+Uso de instancias	20%
+Patrón esporádico	10%
+🧮 Score ejemplo
+
+Text
+
+Score = 
+(ExecutionScore * 0.3) +
+(CPUScore * 0.25) +
+(MemoryScore * 0.15) +
+(InstanceScore * 0.2) +
+(SporadicScore * 0.1)
+
+🏷 Clasificación
+Score	Clasificación
+> 70	Óptima
+40 – 70	Potencial optimización
+< 40	Subutilizada crítica
+6️⃣ Estimación FinOps – Ahorro Potencial
+Premium EP1 ejemplo:
+
+~€150–200 / instancia / mes
+
+Si:
+
+Avg CPU < 5%
+Avg ejecuciones < 100/día
+Always Ready > 1
+
+➡ Posible cambio a Consumption o reducción de instancias.
+
+Fórmula simple:
+
+Text
+
+Ahorro estimado = 
+(Capacidad actual – Capacidad recomendada) × Precio mensual SKU
+
+7️⃣ Recomendaciones Técnicas
+✅ Rightsizing
+
+Reducir EP3 → EP1
+
+✅ Reducción pre-warmed instances
+
+Configurar:
+
+Bash
+
+az functionapp plan update \
+  --number-of-workers 1
+
+✅ Migración a Consumption
+
+Si:
+
+Baja latencia no es crítica
+Sin VNET dedicada
+Sin requisitos Always Ready
+✅ Consolidación
+
+Unificar múltiples Functions en un mismo plan Premium.
+
+8️⃣ Automatización del Informe
+🔄 Opción 1 – Azure Monitor Workbook (Recomendado)
+Dataset dinámico
+Parámetros:
+Rango tiempo
+Threshold ejecuciones
+CPU %
+🔄 Opción 2 – Power BI
+Exportar KQL vía API
+Dataset incremental
+Ranking automático
+🔄 Opción 3 – Automatización Mensual
+Con Azure Automation:
+Runbook PowerShell:
+Enumerar suscripciones
+Obtener workspaces
+Ejecutar queries KQL
+Generar CSV
+Enviar por email
+Con Logic Apps:
+Trigger mensual
+Query Log Analytics
+Guardar en Blob
+Enviar informe PDF
+9️⃣ Riesgos y Consideraciones
+
+⚠ Cargas batch mensuales pueden parecer subutilización
+⚠ Entornos DR activos-pasivos
+⚠ Picos estacionales (Black Friday, cierres fiscales)
+⚠ Procesos internos (timers) sin tráfico HTTP
+⚠ Latencia crítica puede justificar Always Ready
+
+Recomendación: analizar ventana de 90 días mínimo.
+
+🔟 Estructura del Informe Final
+Resumen Ejecutivo
+Nº total Functions Premium
+% Subutilizadas
+Ahorro estimado mensual
+Ahorro anual proyectado
+Tabla Ranking
+Subscription	Function	SKU	Avg Exec/día	Avg CPU	Instancias	Score	Clasificación	Ahorro €
+Heatmap Uso
+Recomendaciones Prioritarias
+✅ Resultado Esperado
+
+Al aplicar este modelo:
+
+Visibilidad global del tenant
+Clasificación objetiva
+Estimación económica
+Base sólida para comité FinOps
+Automatización mensual sostenible
