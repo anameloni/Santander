@@ -56,15 +56,30 @@ resources
 | project name, properties.serverFarmId
 
 
+Ver App Service Plans
+
+resources
+| where type =~ "microsoft.web/serverfarms"
+| project id, name, sku, properties
+
+
+Ver Functions y su vínculo al plan
+
+resources
+| where type =~ "microsoft.web/sites"
+| where kind has "functionapp"
+| project name, properties.serverFarmId
+
+
+
 
 Ejecutar consulta:
 
-// ========= App Service Plans =========
-let plans = resources
+// ===== App Service Plans =====
+let Plans = resources
 | where type =~ "microsoft.web/serverfarms"
-| where sku.name startswith "EP"
 | extend
-    AppServicePlanId = tolower(id),
+    PlanId = tolower(id),
     AppServicePlanName = name,
     ResourceGroup = resourceGroup,
     PlanoTarifas = tostring(sku.name),
@@ -76,32 +91,34 @@ let plans = resources
         )
     )
 | project
-    AppServicePlanId,
+    PlanId,
     AppServicePlanName,
     ResourceGroup,
     PlanoTarifas,
     MinPreWarmedInstances;
 
-// ========= Function Apps =========
-let functions = resources
+// ===== Function Apps =====
+let Functions = resources
 | where type =~ "microsoft.web/sites"
 | where kind has "functionapp"
 | extend
     FunctionAppId = tolower(id),
-    ServerFarmId = tolower(tostring(properties.serverFarmId))
+    ServerFarmId = tolower(tostring(properties.serverFarmId)),
+    FunctionAppName = name,
+    FunctionResourceGroup = resourceGroup
 | project
     FunctionAppId,
-    FunctionAppName = name,
-    FunctionResourceGroup = resourceGroup,
+    FunctionAppName,
+    FunctionResourceGroup,
     ServerFarmId;
 
-// ========= Join =========
-plans
-| join kind=leftouter functions
-    on AppServicePlanId == ServerFarmId
+// ===== JOIN (sintaxis correcta para Azure Resource Graph) =====
+Plans
+| join kind=leftouter Functions
+    on $left.PlanId == $right.ServerFarmId
 | project
     AppServicePlanName,
-    AppServicePlanId,
+    AppServicePlanId = PlanId,
     ResourceGroup,
     PlanoTarifas,
     MinPreWarmedInstances,
@@ -109,15 +126,3 @@ plans
     FunctionAppId,
     FunctionResourceGroup
 | order by ResourceGroup asc, AppServicePlanName asc
-
-
-
-
-ERROR:
-Proporcione la información siguiente al pedir soporte: timestamp = 2026-04-14T11:46:40.5019933Z, correlationId = f691d975-f10a-4f5e-8626-bcd3f416a510. (Código:BadRequest)
-
-Detalles:
-La consulta no es válida. Consulte la documentación del servicio Azure Resource Graph y corrija el error antes de volver a intentarlo. (Código:InvalidQuery)
-join: Invalid entities used as join attributes. When using equality expressions, entities should be used by specifying its source $left or $right. (Código:JoinOperator_InvalidJoinAttributes)
-join: Invalid entities used as join attributes. When using equality expressions, entities should be used by specifying its source $left or $right. (Código:JoinOperator_InvalidJoinAttributes)
-Se puede encontrar más información sobre el error aquí.
