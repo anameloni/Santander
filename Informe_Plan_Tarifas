@@ -109,3 +109,15 @@ plans
     FunctionAppId,
     FunctionResourceGroup
 | order by ResourceGroup asc, AppServicePlanName asc
+
+
+
+
+ERROR:
+Proporcione la información siguiente al pedir soporte: timestamp = 2026-04-14T11:46:40.5019933Z, correlationId = f691d975-f10a-4f5e-8626-bcd3f416a510. (Código:BadRequest)
+
+Detalles:
+La consulta no es válida. Consulte la documentación del servicio Azure Resource Graph y corrija el error antes de volver a intentarlo. (Código:InvalidQuery)
+join: Invalid entities used as join attributes. When using equality expressions, entities should be used by specifying its source $left or $right. (Código:JoinOperator_InvalidJoinAttributes)
+join: Invalid entities used as join attributes. When using equality expressions, entities should be used by specifying its source $left or $right. (Código:JoinOperator_InvalidJoinAttributes)
+Se puede encontrar más información sobre el error aquí.
