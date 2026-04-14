@@ -1,20 +1,3 @@
-resources
-| where type =~ "microsoft.web/serverfarms"
-| where sku.name startswith "EP"
-| extend 
-    ServiceName = name,
-    PlanoTarifas = tostring(sku.name),
-    ResourceType = type,
-    MinPreWarmedInstances = toint(properties.minimumElasticInstanceCount)
-| project 
-    ServiceName,
-    ResourceGroup = resourceGroup,
-    Recurso = ResourceType,
-    PlanoTarifas,
-    MinPreWarmedInstances
-| order by ResourceGroup asc, ServiceName asc
-
----- | | ----
 Consulta con App plan ID y function ID
 
 resources
@@ -41,6 +24,81 @@ resources
         FunctionResourceGroup = resourceGroup,
         ServerFarmId = tostring(properties.serverFarmId)
 ) on $left.AppServicePlanId == $right.ServerFarmId
+| project
+    AppServicePlanName,
+    AppServicePlanId,
+    ResourceGroup,
+    PlanoTarifas,
+    MinPreWarmedInstances,
+    FunctionAppName,
+    FunctionAppId,
+    FunctionResourceGroup
+| order by ResourceGroup asc, AppServicePlanName asc
+
+
+
+------------------------------- | | -------------------------
+
+
+Ver se o campo existe no seu ambiente:
+
+resources
+| where type == "microsoft.web/serverfarms"
+| project name, properties
+
+
+
+Conferir o vínculo da Function:
+
+resources
+| where type == "microsoft.web/sites"
+| where kind has "functionapp"
+| project name, properties.serverFarmId
+
+
+
+Ejecutar consulta:
+
+// ========= App Service Plans =========
+let plans = resources
+| where type =~ "microsoft.web/serverfarms"
+| where sku.name startswith "EP"
+| extend
+    AppServicePlanId = tolower(id),
+    AppServicePlanName = name,
+    ResourceGroup = resourceGroup,
+    PlanoTarifas = tostring(sku.name),
+    MinPreWarmedInstances = toint(
+        coalesce(
+            properties.minimumElasticInstanceCount,
+            properties.elasticScaleConfiguration.minimumElasticInstanceCount,
+            0
+        )
+    )
+| project
+    AppServicePlanId,
+    AppServicePlanName,
+    ResourceGroup,
+    PlanoTarifas,
+    MinPreWarmedInstances;
+
+// ========= Function Apps =========
+let functions = resources
+| where type =~ "microsoft.web/sites"
+| where kind has "functionapp"
+| extend
+    FunctionAppId = tolower(id),
+    ServerFarmId = tolower(tostring(properties.serverFarmId))
+| project
+    FunctionAppId,
+    FunctionAppName = name,
+    FunctionResourceGroup = resourceGroup,
+    ServerFarmId;
+
+// ========= Join =========
+plans
+| join kind=leftouter functions
+    on AppServicePlanId == ServerFarmId
 | project
     AppServicePlanName,
     AppServicePlanId,
