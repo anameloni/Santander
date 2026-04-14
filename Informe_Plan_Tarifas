@@ -75,12 +75,11 @@ resources
 
 Ejecutar consulta:
 
-// ===== App Service Plans =====
-let Plans = resources
+resources
 | where type =~ "microsoft.web/serverfarms"
 | where sku.name startswith "EP"
 | extend
-    PlanId = tolower(id),
+    AppServicePlanId = tolower(id),
     AppServicePlanName = name,
     ResourceGroup = resourceGroup,
     PlanoTarifas = tostring(sku.name),
@@ -91,35 +90,19 @@ let Plans = resources
             0
         )
     )
-| project
-    PlanId,
-    AppServicePlanName,
-    ResourceGroup,
-    PlanoTarifas,
-    MinPreWarmedInstances;
-
-// ===== Function Apps =====
-let Functions = resources
-| where type =~ "microsoft.web/sites"
-| where kind has "functionapp"
-| extend
-    FunctionAppId = tolower(id),
-    ServerFarmId = tolower(tostring(properties.serverFarmId)),
-    FunctionAppName = name,
-    FunctionResourceGroup = resourceGroup
-| project
-    FunctionAppId,
-    FunctionAppName,
-    FunctionResourceGroup,
-    ServerFarmId;
-
-// ===== JOIN (sintaxis correcta para Azure Resource Graph) =====
-Plans
-| join kind=leftouter Functions
-    on $left.PlanId == $right.ServerFarmId
+| join kind=leftouter (
+    resources
+    | where type =~ "microsoft.web/sites"
+    | where kind has "functionapp"
+    | extend
+        FunctionAppId = tolower(id),
+        ServerFarmId = tolower(tostring(properties.serverFarmId)),
+        FunctionAppName = name,
+        FunctionResourceGroup = resourceGroup
+) on $left.AppServicePlanId == $right.ServerFarmId
 | project
     AppServicePlanName,
-    AppServicePlanId = PlanId,
+    AppServicePlanId,
     ResourceGroup,
     PlanoTarifas,
     MinPreWarmedInstances,
@@ -131,10 +114,4 @@ Plans
 
 Error
 
-Proporcione la información siguiente al pedir soporte: timestamp = 2026-04-14T13:20:53.0317373Z, correlationId = aade19c0-3864-49ac-93d6-8b3944dd768c. (Código:BadRequest)
 
-Detalles:
-La consulta no es válida. Consulte la documentación del servicio Azure Resource Graph y corrija el error antes de volver a intentarlo. (Código:InvalidQuery)
-'join' operator: Failed to resolve column named 'PlanId' (Código:Operator_FailedToResolveEntity)
-'join' operator: Failed to resolve column named 'ServerFarmId' (Código:Operator_FailedToResolveEntity)
-Se puede encontrar más información sobre el error aquí.
