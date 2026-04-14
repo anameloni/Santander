@@ -1,46 +1,7 @@
-Consulta con App plan ID y function ID
-
-resources
-| where type =~ "microsoft.web/serverfarms"
-| where sku.name startswith "EP"
-| project
-    AppServicePlanId = id,
-    AppServicePlanName = name,
-    ResourceGroup = resourceGroup,
-    PlanoTarifas = tostring(sku.name),
-    MinPreWarmedInstances = iif(
-        isnotempty(properties.minimumElasticInstanceCount),
-        toint(properties.minimumElasticInstanceCount),
-        0
-    )
-| join kind=leftouter (
-    // Function Apps
-    resources
-    | where type =~ "microsoft.web/sites"
-    | where kind =~ "functionapp"
-    | project
-        FunctionAppId = id,
-        FunctionAppName = name,
-        FunctionResourceGroup = resourceGroup,
-        ServerFarmId = tostring(properties.serverFarmId)
-) on $left.AppServicePlanId == $right.ServerFarmId
-| project
-    AppServicePlanName,
-    AppServicePlanId,
-    ResourceGroup,
-    PlanoTarifas,
-    MinPreWarmedInstances,
-    FunctionAppName,
-    FunctionAppId,
-    FunctionResourceGroup
-| order by ResourceGroup asc, AppServicePlanName asc
+Consulta en ARG (Azure Resource Graph) que retorna el plan de tarifas (Ep1,Ep2, etc) pero no retorna la cantidad de instancias minimas encendidas
 
 
-
-------------------------------- | | -------------------------
-
-
-Ver se o campo existe no seu ambiente:
+1 - Ver se o campo existe no seu ambiente:
 
 resources
 | where type == "microsoft.web/serverfarms"
@@ -48,7 +9,7 @@ resources
 
 
 
-Conferir o vínculo da Function:
+2 - Conferir o vínculo da Function:
 
 resources
 | where type == "microsoft.web/sites"
@@ -56,14 +17,14 @@ resources
 | project name, properties.serverFarmId
 
 
-Ver App Service Plans
+3 - Ver App Service Plans
 
 resources
 | where type =~ "microsoft.web/serverfarms"
 | project id, name, sku, properties
 
 
-Ver Functions y su vínculo al plan
+4 - Ver Functions y su vínculo al plan
 
 resources
 | where type =~ "microsoft.web/sites"
@@ -73,7 +34,7 @@ resources
 
 
 
-Ejecutar consulta:
+5 - Ejecutar consulta:
 
 resources
 | where type =~ "microsoft.web/serverfarms"
@@ -111,7 +72,23 @@ resources
     FunctionResourceGroup
 | order by ResourceGroup asc, AppServicePlanName asc
 
+------------ | | -------------
+Consulta en CLI paraobtener la cantidad minima de instancias pre-warmed:
 
-Error
+Script Bash (Cloud Shell)
+
+az graph query -q '
+resources
+| where type =~ "microsoft.web/serverfarms"
+| where sku.name startswith "EP"
+| project name, resourceGroup
+' -o tsv \
+| while read PLAN RG; do
+  PREWARM=$(az functionapp plan show \
+    --name "$PLAN" \
+    --resource-group "$RG" \
+    --query "properties.minimumElasticInstanceCount" -o tsv)
+  echo "$PLAN | $RG | PreWarmed=$PREWARM"
+done
 
 
