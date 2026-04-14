@@ -1,5 +1,6 @@
 resources
-| where type == "microsoft.web/serverfarms"
+| where type =~ "microsoft.web/serverfarms"
+| where sku.name startswith "EP"
 | extend 
     ServiceName = name,
     PlanoTarifas = tostring(sku.name),
@@ -12,13 +13,41 @@ resources
     PlanoTarifas,
     MinPreWarmedInstances
 | order by ResourceGroup asc, ServiceName asc
-``
 
+---- | | ----
+Consulta con App plan ID y function ID
 
-Error:
-Proporcione la información siguiente al pedir soporte: timestamp = 2026-04-14T11:17:11.0508718Z, correlationId = 5b422a89-5204-4b62-afd6-4978f048a518. (Código:BadRequest)
-
-Detalles:
-La consulta no es válida. Consulte la documentación del servicio Azure Resource Graph y corrija el error antes de volver a intentarlo. (Código:InvalidQuery)
-ParserFailure (Código:ParserFailure)
-ParserFailure (Código:ParserFailure)
+resources
+| where type =~ "microsoft.web/serverfarms"
+| where sku.name startswith "EP"
+| project
+    AppServicePlanId = id,
+    AppServicePlanName = name,
+    ResourceGroup = resourceGroup,
+    PlanoTarifas = tostring(sku.name),
+    MinPreWarmedInstances = iif(
+        isnotempty(properties.minimumElasticInstanceCount),
+        toint(properties.minimumElasticInstanceCount),
+        0
+    )
+| join kind=leftouter (
+    // Function Apps
+    resources
+    | where type =~ "microsoft.web/sites"
+    | where kind =~ "functionapp"
+    | project
+        FunctionAppId = id,
+        FunctionAppName = name,
+        FunctionResourceGroup = resourceGroup,
+        ServerFarmId = tostring(properties.serverFarmId)
+) on $left.AppServicePlanId == $right.ServerFarmId
+| project
+    AppServicePlanName,
+    AppServicePlanId,
+    ResourceGroup,
+    PlanoTarifas,
+    MinPreWarmedInstances,
+    FunctionAppName,
+    FunctionAppId,
+    FunctionResourceGroup
+| order by ResourceGroup asc, AppServicePlanName asc
