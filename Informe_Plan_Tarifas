@@ -78,6 +78,7 @@ Ejecutar consulta:
 // ===== App Service Plans =====
 let Plans = resources
 | where type =~ "microsoft.web/serverfarms"
+| where sku.name startswith "EP"
 | extend
     PlanId = tolower(id),
     AppServicePlanName = name,
@@ -126,3 +127,14 @@ Plans
     FunctionAppId,
     FunctionResourceGroup
 | order by ResourceGroup asc, AppServicePlanName asc
+
+
+Error
+
+Proporcione la información siguiente al pedir soporte: timestamp = 2026-04-14T13:20:53.0317373Z, correlationId = aade19c0-3864-49ac-93d6-8b3944dd768c. (Código:BadRequest)
+
+Detalles:
+La consulta no es válida. Consulte la documentación del servicio Azure Resource Graph y corrija el error antes de volver a intentarlo. (Código:InvalidQuery)
+'join' operator: Failed to resolve column named 'PlanId' (Código:Operator_FailedToResolveEntity)
+'join' operator: Failed to resolve column named 'ServerFarmId' (Código:Operator_FailedToResolveEntity)
+Se puede encontrar más información sobre el error aquí.
