@@ -75,7 +75,12 @@ resources
 ------------ | | -------------
 Consulta en CLI paraobtener la cantidad minima de instancias pre-warmed:
 
-Script Bash (Cloud Shell)
+1 - En Azure Cloud Shell (Bash) ejecuta:
+z config set extension.dynamic_install_allow_preview=true
+
+
+
+2 - Ejecutar el script Bash (Cloud Shell):
 
 az graph query -q '
 resources
