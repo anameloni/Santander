@@ -1,0 +1,15 @@
+resources
+| where type == "microsoft.web/serverfarms"
+| extend 
+    ServiceName = name,
+    PlanoTarifas = tostring(sku.name),
+    ResourceType = type,
+    MinPreWarmedInstances = toint(properties.minimumElasticInstanceCount)
+| project 
+    ServiceName,
+    ResourceGroup = resourceGroup,
+    Recurso = ResourceType,
+    PlanoTarifas,
+    MinPreWarmedInstances
+| order by ResourceGroup asc, ServiceName asc
+``
