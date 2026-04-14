@@ -13,3 +13,12 @@ resources
     MinPreWarmedInstances
 | order by ResourceGroup asc, ServiceName asc
 ``
+
+
+Error:
+Proporcione la información siguiente al pedir soporte: timestamp = 2026-04-14T11:17:11.0508718Z, correlationId = 5b422a89-5204-4b62-afd6-4978f048a518. (Código:BadRequest)
+
+Detalles:
+La consulta no es válida. Consulte la documentación del servicio Azure Resource Graph y corrija el error antes de volver a intentarlo. (Código:InvalidQuery)
+ParserFailure (Código:ParserFailure)
+ParserFailure (Código:ParserFailure)
