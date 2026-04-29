@@ -2,26 +2,51 @@
 
 SELECT
   QUERY_ID,
-  TOTAL_ELAPSED_TIME/1000 AS sec,
-  CPU_TIME/1000 AS cpu_sec,
-  BYTES_SCANNED/1024/1024/1024 AS gb_scanned
-FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+  TOTAL_ELAPSED_TIME / 1000 AS total_sec,
+  EXECUTION_TIME / 1000 AS execution_sec,
+  BYTES_SCANNED / 1024 / 1024 / 1024 AS gb_scanned,
+  ROWS_PRODUCED
+FROM CONSUMPTION.QUERY_HISTORY_TOTAL_V
 WHERE WAREHOUSE_NAME = 'TU_WAREHOUSE'
-ORDER BY TOTAL_ELAPSED_TIME DESC
+  AND START_TIME >= DATEADD(day, -7, CURRENT_TIMESTAMP())
+ORDER BY EXECUTION_TIME DESC
 LIMIT 20;
 
 Evaluar los resultados:El overhead no siempre es “idle”, sino trabajo malgastado.
-- Full table scans
-- Queries repetidas idénticas
-- Falta de clustering en tablas grandes
+- EXECUTION_TIME: Esfuerzo de interpretacion de queries; Joins pesados, aggregates
+- BYTES_SCANNED: Volumen leído; Full scans, falta de pruning
+- ROWS_PRODUCED: Output; Queries sobre‑complejas
+- TOTAL_ELAPSED_TIME: Tiempo usuario; Queueing o waits
 
-Acciones
-- Result cache
-- Materialized views
-- Clustering selectivo
+Patrones de ineficiencia típicos
+1️⃣ Mucho EXECUTION_TIME + mucho BYTES_SCANNED
+➡️ Falta de:
+- Filtros selectivos
+- Clustering
+- Partition pruning
+
+2️⃣ Poco EXECUTION_TIME + mucho TOTAL_ELAPSED_TIME
+➡️ Problema de:
+- Concurrency
+- Warehouse pequeño
+- Cola de ejecución
+
+1.2  Muchas queries similares repitiéndose
+
+SELECT
+  QUERY_TEXT,
+  COUNT(*) AS executions,
+  SUM(EXECUTION_TIME)/1000 AS total_exec_sec
+FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+WHERE WAREHOUSE_NAME = 'TU_WAREHOUSE'
+GROUP BY QUERY_TEXT
+HAVING COUNT(*) > 5
+ORDER BY total_exec_sec DESC;
+
+Posible cache desaprovechado o BI mal configurado.
 
 
-2 Auto‑suspend / auto‑resume mal ajustado
+3 Auto‑suspend / auto‑resume mal ajustado
 
 SELECT
   COUNT(*) AS resumes,
