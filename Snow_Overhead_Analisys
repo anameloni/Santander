@@ -1,0 +1,54 @@
+1 Queries ineficientes o reprocesos
+
+SELECT
+  QUERY_ID,
+  TOTAL_ELAPSED_TIME/1000 AS sec,
+  CPU_TIME/1000 AS cpu_sec,
+  BYTES_SCANNED/1024/1024/1024 AS gb_scanned
+FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+WHERE WAREHOUSE_NAME = 'TU_WAREHOUSE'
+ORDER BY TOTAL_ELAPSED_TIME DESC
+LIMIT 20;
+
+Evaluar los resultados:El overhead no siempre es “idle”, sino trabajo malgastado.
+- Full table scans
+- Queries repetidas idénticas
+- Falta de clustering en tablas grandes
+
+Acciones
+- Result cache
+- Materialized views
+- Clustering selectivo
+
+
+2 Auto‑suspend / auto‑resume mal ajustado
+
+SELECT
+  COUNT(*) AS resumes,
+  AVG(DATEDIFF(second, START_TIME, END_TIME)) AS avg_uptime_sec
+FROM SNOWFLAKE.ACCOUNT_USAGE.WAREHOUSE_LOAD_HISTORY
+WHERE WAREHOUSE_NAME = 'TU_WAREHOUSE';
+
+Evaluar los resultados: Muchos resumes pequeños generan overhead.
+- Muchísimos resumes
+- Uptime promedio muy bajo (<2–3 min)
+
+*Solicitar acceso a la tabla "WAREHOUSE_LOAD_HISTORY"
+
+
+3.3 Concurrency & queueing
+
+SELECT
+  AVG(QUEUED_PROVISIONING_TIME + QUEUED_REPAIR_TIME + QUEUED_OVERLOAD_TIME) AS avg_queue_ms
+FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+WHERE WAREHOUSE_NAME = 'TU_WAREHOUSE'
+  AND START_TIME >= DATEADD(day, -7, CURRENT_TIMESTAMP());
+
+Evaluar los resultados: El warehouse está activo pero los queries esperan.
+- Mucho tiempo en cola
+- Usuarios “pisándose”
+
+Acciones
+- Multi-cluster warehouse
+- Separar cargas pesadas
+- Revisar tamaño (S → M)
