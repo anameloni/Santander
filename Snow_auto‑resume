@@ -1,0 +1,11 @@
+3.2 Auto‑suspend / auto‑resume mal ajustado
+Muchos resumes pequeños generan overhead.
+
+SELECT
+  COUNT(*) AS resumes,
+  AVG(DATEDIFF(second, START_TIME, END_TIME)) AS avg_uptime_sec
+FROM SNOWFLAKE.ACCOUNT_USAGE.WAREHOUSE_LOAD_HISTORY
+WHERE WAREHOUSE_NAME = 'TU_WAREHOUSE';
+
+Muchísimos resumes
+Uptime promedio muy bajo (<2–3 min)
