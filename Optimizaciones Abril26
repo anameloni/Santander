@@ -1,0 +1,12 @@
+Detección de incidencia en el envio de las trazas de una function a application Insight.
+Solicitud de refund debido a incidencia ocasionada por equipo de ingeneros del provedor Databricks - Ticket Microsoft: 2604160050003430
+Recursos afectados: gsci1weuafaoe2020crit158 y gsci1weuafaoe2020crit159
+Recursos afectados: gscd1weuafaoe2020crit053 y gscd1weuafaoe2020crit052
+Descomisionado de Funciones
+Descomisionado de Funciones
+Cambio para Gen 2
+Ivan ha abierto ticket solicitando reducion en PRE y en seguida la solicita para PRO para reducion de 3 instancias de functions para 2 en PRE y en PRO
+Evaluando uso
+Cambiar tallaje de M para XS
+Cambiar tallaje de L para XS
+Recursos afectados: gsci1glbsubgeneriglob001 - CR 15/04
