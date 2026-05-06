@@ -1,12 +1,14 @@
-Detección de incidencia en el envio de las trazas de una function a application Insight.
-Solicitud de refund debido a incidencia ocasionada por equipo de ingeneros del provedor Databricks - Ticket Microsoft: 2604160050003430
-Recursos afectados: gsci1weuafaoe2020crit158 y gsci1weuafaoe2020crit159
-Recursos afectados: gscd1weuafaoe2020crit053 y gscd1weuafaoe2020crit052
-Descomisionado de Funciones
-Descomisionado de Funciones
-Cambio para Gen 2
-Ivan ha abierto ticket solicitando reducion en PRE y en seguida la solicita para PRO para reducion de 3 instancias de functions para 2 en PRE y en PRO
-Evaluando uso
-Cambiar tallaje de M para XS
-Cambiar tallaje de L para XS
-Recursos afectados: gsci1glbsubgeneriglob001 - CR 15/04
+Fecha	Tecnología	Acción
+		
+abr-26	Databricks	Solicitud de refund debido a incidencia ocasionada por equipo de ingeneros del provedor Databricks - Ticket Microsoft: 2604160050003430
+abr-26	App Service Plan/Functions	Recursos afectados: gsci1weuafaoe2020crit158 y gsci1weuafaoe2020crit159
+08-abr	App Service Plan/Functions	Recursos afectados: gscd1weuafaoe2020crit053 y gscd1weuafaoe2020crit052
+ene-26	App Service Plan/Functions	Descomisionado de Funciones
+sep-25	App Service Plan/Functions	Descomisionado de Funciones
+sep-26	 WH_SnowFlake 	Cambio para Gen 2
+mar-26	App Service Plan/Functions	Ivan ha abierto ticket solicitando reducion en PRE y en seguida la solicita para PRO para reducion de 3 instancias de functions para 2 en PRE y en PRO
+abr-26	Snowflake_DEV_REP_REGUL_WH	Evaluando uso
+abr-26	Snowflake_PRE_REP_REGUL_WH	Cambiar tallaje de M para XS
+abr-26	Snowflake_PRO_REP_REGUL_WH	Cambiar tallaje de L para XS
+abr-26	App Service Plan/Functions	Recursos afectados: gsci1glbsubgeneriglob001 - CR 15/04
+abr-26	App Service Plan/Functions	
