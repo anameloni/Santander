@@ -1,0 +1,135 @@
+Esta query reconstruye cuándo cada cluster probablemente se encendió y apagó, separa el tiempo en ejecución vs idle y estima el tiempo entre ejecuciones, usando únicamente QUERY_HISTORY.
+
+Con esto puedes ver cosas como:
+
+🔴 clusters que se encienden “para nada”
+EXECUTION_SECONDS = 5s
+IDLE = 60s
+
+💸 desperdicio alto
+🟡 workloads fragmentados
+muchos ciclos:
+ON → OFF → ON → OFF
+
+🟢 buen uso
+periodos largos:
+EXECUTION >> IDLE
+
+Por cada cluster y “bloque de uso”:
+
+Campo                 !     Significado
+CLUSTER_ON            |  cuándo se encendió (estimado)
+CLUSTER_OFF           !  cuándo se apagó (estimado)
+ACTIVE_START/END      !  actividad real
+EXECUTION_SECONDS     !  tiempo ejecutando queries
+IDLE_AFTER_EXECUTION  !  idle tras última query
+
+Query completa
+👉 Buscar en la doc de Snow campo que contiene AUTO_SUSPEND_SECONDS
+
+-- ⚙️ parámetro (ajustar)
+SET AUTO_SUSPEND_SECONDS = 60;
+
+WITH base AS (
+    SELECT
+        CLUSTER_NUMBER,
+        START_TIME,
+        END_TIME
+    FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+    WHERE WAREHOUSE_NAME = 'TU_WAREHOUSE'
+),
+
+-- 1. eliminar overlaps (running window)
+ordered AS (
+    SELECT
+        *,
+        MAX(END_TIME) OVER (
+            PARTITION BY CLUSTER_NUMBER
+            ORDER BY START_TIME
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        ) AS RUNNING_MAX_END
+    FROM base
+),
+
+-- 2. detectar nuevos periodos
+flagged AS (
+    SELECT
+        *,
+        CASE 
+            WHEN START_TIME > LAG(RUNNING_MAX_END) OVER (
+                PARTITION BY CLUSTER_NUMBER
+                ORDER BY START_TIME
+            )
+            THEN 1 ELSE 0
+        END AS NEW_PERIOD
+    FROM ordered
+),
+
+-- 3. agrupar actividad continua
+grouped AS (
+    SELECT
+        *,
+        SUM(NEW_PERIOD) OVER (
+            PARTITION BY CLUSTER_NUMBER
+            ORDER BY START_TIME
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        ) AS GROUP_ID
+    FROM flagged
+),
+
+-- 4. periodos reales de actividad
+activity_periods AS (
+    SELECT
+        CLUSTER_NUMBER,
+        GROUP_ID,
+        MIN(START_TIME) AS ACTIVE_START,
+        MAX(END_TIME) AS ACTIVE_END
+    FROM grouped
+    GROUP BY CLUSTER_NUMBER, GROUP_ID
+),
+
+-- 5. reconstruir ON/OFF del cluster
+cluster_lifecycle AS (
+    SELECT
+        CLUSTER_NUMBER,
+
+        -- cluster se enciende cuando empieza actividad
+        ACTIVE_START AS CLUSTER_ON,
+
+        -- cluster se apaga después del auto_suspend
+        DATEADD(
+            second, 
+            $AUTO_SUSPEND_SECONDS, 
+            ACTIVE_END
+        ) AS CLUSTER_OFF,
+
+        ACTIVE_START,
+        ACTIVE_END,
+
+        -- tiempo ejecutando queries
+        DATEDIFF('second', ACTIVE_START, ACTIVE_END) AS EXECUTION_SECONDS,
+
+        -- idle dentro del periodo ON
+        $AUTO_SUSPEND_SECONDS AS IDLE_AFTER_EXECUTION
+
+    FROM activity_periods
+)
+
+SELECT *
+FROM cluster_lifecycle
+ORDER BY CLUSTER_NUMBER, CLUSTER_ON;
+
+----- ! ! -----------
+
+métricas agregadas
+Puedes sacar eficiencia por cluster:
+
+SELECT
+    CLUSTER_NUMBER,
+    SUM(EXECUTION_SECONDS) AS EXEC_TIME,
+    SUM(IDLE_AFTER_EXECUTION) AS IDLE_TIME,
+    SUM(EXECUTION_SECONDS) 
+      / NULLIF(SUM(EXECUTION_SECONDS) + SUM(IDLE_AFTER_EXECUTION),0)
+      AS UTILIZATION_RATIO
+FROM cluster_lifecycle
+GROUP BY CLUSTER_NUMBER;
