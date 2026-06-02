@@ -1,4 +1,184 @@
-1 Queries ineficientes o reprocesos
+1 Query Snowflake – Análisis de Overhead Multi‑Cluster
+Esta consulta identifica los tiempos de encendido y apagado de cada cluster, así como el tiempo idle por cluster
+
+
+-- ===========================================
+-- PARAM: rango de análisis (últimos 7 días)
+-- ===========================================
+WITH params AS (
+    SELECT 
+        DATEADD(day, -7, CURRENT_TIMESTAMP()) AS start_date,
+        CURRENT_TIMESTAMP() AS end_date
+),
+
+-- ===========================================
+-- EVENTOS DE CLUSTER (START / STOP)
+-- ===========================================
+events AS (
+    SELECT
+        WAREHOUSE_NAME,
+        CLUSTER_NUMBER,
+        EVENT_NAME,
+        EVENT_TIMESTAMP,
+        CONVERT_TIMEZONE('UTC', 'Europe/Madrid', EVENT_TIMESTAMP) AS EVENT_TS_MADRID
+    FROM SNOWFLAKE.ACCOUNT_USAGE.WAREHOUSE_EVENTS_HISTORY, params
+    WHERE EVENT_TIMESTAMP BETWEEN params.start_date AND params.end_date
+    AND EVENT_NAME IN ('STARTED', 'RESUMED', 'SUSPENDED', 'STOPPED')
+),
+
+-- ===========================================
+-- IDENTIFICAR START / STOP
+-- ===========================================
+cluster_events AS (
+    SELECT
+        WAREHOUSE_NAME,
+        CLUSTER_NUMBER,
+
+        EVENT_NAME,
+        EVENT_TIMESTAMP,
+        EVENT_TS_MADRID,
+
+        CASE 
+            WHEN EVENT_NAME IN ('STARTED', 'RESUMED') THEN 'START'
+            WHEN EVENT_NAME IN ('SUSPENDED', 'STOPPED') THEN 'STOP'
+        END AS EVENT_TYPE
+    FROM events
+),
+
+-- ===========================================
+-- EMPAREJAR START CON SIGUIENTE STOP
+-- ===========================================
+paired_events AS (
+    SELECT
+        WAREHOUSE_NAME,
+        CLUSTER_NUMBER,
+
+        EVENT_TIMESTAMP AS START_TIME,
+        EVENT_TS_MADRID AS START_TIME_MADRID,
+
+        LEAD(EVENT_TIMESTAMP) OVER (
+            PARTITION BY WAREHOUSE_NAME, CLUSTER_NUMBER
+            ORDER BY EVENT_TIMESTAMP
+        ) AS END_TIME,
+
+        LEAD(EVENT_TS_MADRID) OVER (
+            PARTITION BY WAREHOUSE_NAME, CLUSTER_NUMBER
+            ORDER BY EVENT_TIMESTAMP
+        ) AS END_TIME_MADRID,
+
+        EVENT_TYPE
+
+    FROM cluster_events
+    WHERE EVENT_TYPE = 'START'
+),
+
+-- ===========================================
+-- QUEDARNOS SOLO CON PAREJAS VÁLIDAS START → STOP
+-- ===========================================
+valid_intervals AS (
+    SELECT *
+    FROM paired_events
+    WHERE END_TIME IS NOT NULL
+),
+
+-- ===========================================
+-- MÉTRICAS DE QUERIES
+-- ===========================================
+query_usage AS (
+    SELECT
+        WAREHOUSE_NAME,
+        CLUSTER_NUMBER,
+        START_TIME,
+        END_TIME,
+
+        -- Tiempo total ejecutando queries (minutos)
+        SUM(DATEDIFF(second, qh.START_TIME, qh.END_TIME)) / 60 AS EXECUTION_TIME_MINUTES,
+
+        -- Última query ejecutada
+        MAX(qh.END_TIME) AS LAST_QUERY_TIME
+
+    FROM valid_intervals vi
+    LEFT JOIN SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY qh
+        ON vi.WAREHOUSE_NAME = qh.WAREHOUSE_NAME
+        AND qh.START_TIME BETWEEN vi.START_TIME AND vi.END_TIME
+
+    GROUP BY
+        WAREHOUSE_NAME,
+        CLUSTER_NUMBER,
+        START_TIME,
+        END_TIME
+),
+
+-- ===========================================
+-- CÁLCULO FINAL
+-- ===========================================
+final AS (
+    SELECT
+        vi.WAREHOUSE_NAME,
+        vi.CLUSTER_NUMBER,
+
+        vi.START_TIME_MADRID,
+        vi.END_TIME_MADRID,
+
+        -- Duración total cluster activo
+        DATEDIFF(second, vi.START_TIME, vi.END_TIME) / 60 AS TOTAL_TIME_MINUTES,
+
+        COALESCE(qu.EXECUTION_TIME_MINUTES, 0) AS EXECUTION_TIME_MINUTES,
+
+        -- Idle = total - ejecución
+        (DATEDIFF(second, vi.START_TIME, vi.END_TIME) / 60)
+        - COALESCE(qu.EXECUTION_TIME_MINUTES, 0) AS IDLE_TIME_MINUTES,
+
+        -- Tiempo desde última query hasta STOP
+        DATEDIFF(
+            second,
+            COALESCE(qu.LAST_QUERY_TIME, vi.START_TIME),
+            vi.END_TIME
+        ) / 60 AS TIME_TO_SUSPEND_MINUTES,
+
+        -- Tiempo entre apagado y próximo encendido
+        DATEDIFF(
+            second,
+            vi.END_TIME,
+            LEAD(vi.START_TIME) OVER (
+                PARTITION BY vi.WAREHOUSE_NAME, vi.CLUSTER_NUMBER
+                ORDER BY vi.START_TIME
+            )
+        ) / 60 AS TIME_BETWEEN_STARTS_MINUTES,
+
+        -- Indicador de overhead
+        CASE
+            WHEN 
+                (
+                    ( (DATEDIFF(second, vi.START_TIME, vi.END_TIME) / 60)
+                      - COALESCE(qu.EXECUTION_TIME_MINUTES, 0)
+                    ) > ((DATEDIFF(second, vi.START_TIME, vi.END_TIME) / 60) * 0.7)
+                )
+            THEN TRUE
+            ELSE FALSE
+        END AS OVERHEAD_FLAG
+
+    FROM valid_intervals vi
+    LEFT JOIN query_usage qu
+        ON vi.WAREHOUSE_NAME = qu.WAREHOUSE_NAME
+        AND vi.CLUSTER_NUMBER = qu.CLUSTER_NUMBER
+        AND vi.START_TIME = qu.START_TIME
+)
+
+-- ===========================================
+-- RESULTADO FINAL
+-- ===========================================
+SELECT *
+FROM final
+ORDER BY
+    WAREHOUSE_NAME,
+    CLUSTER_NUMBER,
+    START_TIME_MADRID;
+
+
+
+
+2 Queries ineficientes o reprocesos
 
 SELECT
   QUERY_ID,
