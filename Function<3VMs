@@ -37,41 +37,25 @@ AZURE GRAPH
 1. Inventario Azure Resource Graph
 
 resources
-| where type =~ 'microsoft.web/sites'
-| where kind contains 'functionapp'
-| project
-    subscriptionId,
-    resourceGroup,
-    name,
-    location,
-    kind,
-    properties
-
-
-2. Function Apps en Premium
-
-resources
 | where type =~ 'microsoft.web/serverfarms'
 | where sku.tier =~ 'ElasticPremium'
+| where name =~ 'gscd1weuaspmtrsdhcrit100'
 | project
     subscriptionId,
     resourceGroup,
     name,
     skuName=sku.name,
+    properties.maximumElasticWorkerCount,
+    properties.maximumNumberOfWorker,
+    properties.numberOfWorkers,
+    properties.currentNumberOfWorkers,
+    properties.currentWorkerSizeId,
+    properties.workerSize,
+    properties.serverFarmId,
     location
 
-3. Configuración Function Apps
 
-resources
-| where type =~ 'microsoft.web/sites'
-| where kind contains 'functionapp'
-| extend serverFarmId=tostring(properties.serverFarmId)
-| project
-    name,
-    location,
-    serverFarmId,
-    resourceGroup,
-    subscriptionId
+
 
 AZURE MONITOR
 CLI
