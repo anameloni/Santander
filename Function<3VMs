@@ -1,91 +1,128 @@
-QUERY 18/06/2026 - PROMPT SACAR EJECUCIONES, TIEPOS Y METRICAS
+QUERY 18/06/2026 - MIGRAR PARA FLEX CONSUMPTION
 
-Actúa como un especialista senior de Azure Functions y Azure Monitor.
+✅ Migrar a Flex Consumption
+CPU P95 < 30%
+Memoria P95 < 30%
+Más del 70% del tiempo con una sola instancia
+Escalado ocasional
+Sin necesidad real de instancias Always Ready
+Baja ejecución sostenida
+Coste Premium elevado frente a consumo efectivo
 
-Necesito generar un informe exhaustivo de todas las Azure Functions que utilizan un Premium Plan (Elastic Premium) dentro de la suscripción o conjunto de suscripciones analizadas.
+⚠ Evaluar técnicamente
+Cuando existan:
 
-Para cada Function App, recopila y muestra la siguiente información:
+VNET Integration
+Private Endpoints
+Alta concurrencia
+Triggers críticos
+Duraciones largas
+Requisitos de latencia muy baja
 
-INFORMACIÓN GENERAL
-- Nombre de la Function App
-- Resource Group
-- Suscripción
-- Región
-- Sistema operativo (Windows/Linux)
-- Estado actual
+Flex Consumption soporta integración VNET y Private Endpoints, pero requiere validación de arquitectura y rendimiento antes de migrar. [learn.microsoft.com], [learn.microsoft.com]
 
-CONFIGURACIÓN DEL PLAN PREMIUM
-- Nombre del App Service Plan asociado
-- SKU del plan Premium:
-  - EP1
-  - EP2
-  - EP3
-- Número mínimo de instancias (Always Ready / Pre-Warmed Instances)
-- Número máximo de instancias configuradas
-- Configuración de escalado disponible
+❌ Mantener en Premium
+Cuando se detecte:
 
-UTILIZACIÓN REAL DE RECURSOS
-Obtener métricas reales durante el período analizado (últimos 30 días por defecto):
-- Consumo promedio, máximo y percentil 95 de CPU
-- Consumo promedio, máximo y percentil 95 de memoria
-- CPU por instancia
-- Memoria por instancia
-- Tendencia temporal de utilización
+Uso constante
+Instancias activas permanentemente
+Carga sostenida 24x7
+Dependencia crítica de instancias prewarmed/always ready
+Necesidad de tiempos de respuesta consistentes sin variabilidad
 
-EJECUCIONES DE FUNCTIONS
-- Número total de ejecuciones
-- Ejecuciones por día
-- Ejecuciones por función
-- Tiempo medio de ejecución
-- Tiempo máximo de ejecución
-- Percentil 95 de duración
-- Errores y tasa de error
+Premium está específicamente diseñado para cargas continuas y aplicaciones que requieren instancias permanentemente preparadas. [learn.microsoft.com], [learn.microsoft.com]
 
-INFORMACIÓN DE INSTANCIAS
-Para cada instancia utilizada durante el período:
-- Identificador de instancia
-- Tiempo total encendida
-- Tiempo total ejecutando funciones
-- Tiempo total idle
-- Porcentaje de utilización real
-- CPU media
-- CPU máxima
-- Memoria media
-- Memoria máxima
+CONSULTAS NECESARIAS
+AZURE GRAPH
+1. Inventario Azure Resource Graph
 
-ANÁLISIS DE CAPACIDAD
-- Horas totales activas por instancia
-- Horas totales idle por instancia
-- Ratio de utilización real respecto al tiempo encendido
-- Capacidad infrautilizada
-- Recomendación de reducción o aumento de tamaño del plan
-
-FORMATO DE SALIDA
-Generar una tabla con las siguientes columnas:
-
-| Function App | Plan | SKU | Región | Pre-Warmed | Instancias Utilizadas | CPU Avg % | CPU Max % | Memoria Avg % | Memoria Max % | Total Ejecuciones | Duración Media | Horas Activas | Horas Idle | Utilización % |
-
-Además:
-- Incluir gráficos de CPU y memoria.
-- Incluir tendencias de escalado.
-- Identificar Functions con menos del 20% de utilización.
-- Identificar Functions con riesgo de saturación (>80% CPU o memoria).
-- Mostrar conclusiones y recomendaciones de optimización de costes.
-
-Fuentes de datos a utilizar:
-- Azure Monitor Metrics
-- Azure Functions Metrics
-- Application Insights
-- App Service Plan Metrics
-- Azure Resource Graph
-- Azure Advisor (si está disponible)
-
-Periodo de análisis:
-Últimos 30 días.
+resources
+| where type =~ 'microsoft.web/sites'
+| where kind contains 'functionapp'
+| project
+    subscriptionId,
+    resourceGroup,
+    name,
+    location,
+    kind,
+    properties
 
 
+2. Function Apps en Premium
+
+resources
+| where type =~ 'microsoft.web/serverfarms'
+| where sku.tier =~ 'ElasticPremium'
+| project
+    subscriptionId,
+    resourceGroup,
+    name,
+    skuName=sku.name,
+    location
+
+3. Configuración Function Apps
+
+resources
+| where type =~ 'microsoft.web/sites'
+| where kind contains 'functionapp'
+| extend serverFarmId=tostring(properties.serverFarmId)
+| project
+    name,
+    location,
+    serverFarmId,
+    resourceGroup,
+    subscriptionId
+
+AZURE MONITOR
+4. Métricas de utilización (90 días) - P95
+
+AzureMetrics
+| where TimeGenerated > ago(90d)
+| summarize
+    Avg=avg(Average),
+    Max=max(Maximum),
+    P95=percentile(Maximum,95)
+by ResourceId, MetricName
 
 
+5. Número de instancias usadas
+
+AzureMetrics
+| where MetricName == "InstanceCount"
+| where TimeGenerated > ago(90d)
+| summarize
+    AvgInstances=avg(Maximum),
+    MaxInstances=max(Maximum)
+by ResourceId
+
+
+6. Porcentaje del tiempo con una sola instancia
+
+AzureMetrics
+| where MetricName == "InstanceCount"
+| where TimeGenerated > ago(90d)
+| summarize
+    SingleInstance=countif(Maximum <= 1),
+    MultiInstance=countif(Maximum > 1)
+by ResourceId
+| extend
+    PercentSingle =
+        100.0 * SingleInstance / (SingleInstance + MultiInstance)
+
+
+COST MANAGEMENT
+7. Costes Premium actuales
+filtros:
+- ResourceId
+- MeterCategory
+- MeterSubCategory
+- AmortizedCost
+- ActualCost
+- Periodo: 90 dias
+
+
+
+------------------------ | | -----------------------------------
 🧭 1) Azure Resource Graph: listar todos os Function Apps do tenant
 Execute no Azure CLI ou no portal (Resource Graph Explorer):
 
