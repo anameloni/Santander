@@ -1,3 +1,91 @@
+QUERY 18/06/2026 - PROMPT SACAR EJECUCIONES, TIEPOS Y METRICAS
+
+Actúa como un especialista senior de Azure Functions y Azure Monitor.
+
+Necesito generar un informe exhaustivo de todas las Azure Functions que utilizan un Premium Plan (Elastic Premium) dentro de la suscripción o conjunto de suscripciones analizadas.
+
+Para cada Function App, recopila y muestra la siguiente información:
+
+INFORMACIÓN GENERAL
+- Nombre de la Function App
+- Resource Group
+- Suscripción
+- Región
+- Sistema operativo (Windows/Linux)
+- Estado actual
+
+CONFIGURACIÓN DEL PLAN PREMIUM
+- Nombre del App Service Plan asociado
+- SKU del plan Premium:
+  - EP1
+  - EP2
+  - EP3
+- Número mínimo de instancias (Always Ready / Pre-Warmed Instances)
+- Número máximo de instancias configuradas
+- Configuración de escalado disponible
+
+UTILIZACIÓN REAL DE RECURSOS
+Obtener métricas reales durante el período analizado (últimos 30 días por defecto):
+- Consumo promedio, máximo y percentil 95 de CPU
+- Consumo promedio, máximo y percentil 95 de memoria
+- CPU por instancia
+- Memoria por instancia
+- Tendencia temporal de utilización
+
+EJECUCIONES DE FUNCTIONS
+- Número total de ejecuciones
+- Ejecuciones por día
+- Ejecuciones por función
+- Tiempo medio de ejecución
+- Tiempo máximo de ejecución
+- Percentil 95 de duración
+- Errores y tasa de error
+
+INFORMACIÓN DE INSTANCIAS
+Para cada instancia utilizada durante el período:
+- Identificador de instancia
+- Tiempo total encendida
+- Tiempo total ejecutando funciones
+- Tiempo total idle
+- Porcentaje de utilización real
+- CPU media
+- CPU máxima
+- Memoria media
+- Memoria máxima
+
+ANÁLISIS DE CAPACIDAD
+- Horas totales activas por instancia
+- Horas totales idle por instancia
+- Ratio de utilización real respecto al tiempo encendido
+- Capacidad infrautilizada
+- Recomendación de reducción o aumento de tamaño del plan
+
+FORMATO DE SALIDA
+Generar una tabla con las siguientes columnas:
+
+| Function App | Plan | SKU | Región | Pre-Warmed | Instancias Utilizadas | CPU Avg % | CPU Max % | Memoria Avg % | Memoria Max % | Total Ejecuciones | Duración Media | Horas Activas | Horas Idle | Utilización % |
+
+Además:
+- Incluir gráficos de CPU y memoria.
+- Incluir tendencias de escalado.
+- Identificar Functions con menos del 20% de utilización.
+- Identificar Functions con riesgo de saturación (>80% CPU o memoria).
+- Mostrar conclusiones y recomendaciones de optimización de costes.
+
+Fuentes de datos a utilizar:
+- Azure Monitor Metrics
+- Azure Functions Metrics
+- Application Insights
+- App Service Plan Metrics
+- Azure Resource Graph
+- Azure Advisor (si está disponible)
+
+Periodo de análisis:
+Últimos 30 días.
+
+
+
+
 🧭 1) Azure Resource Graph: listar todos os Function Apps do tenant
 Execute no Azure CLI ou no portal (Resource Graph Explorer):
 
