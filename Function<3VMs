@@ -74,6 +74,13 @@ resources
     subscriptionId
 
 AZURE MONITOR
+CLI
+Azure CLI para métricas de 90 días
+START=$(date -u -d "90 days ago" +"%Y-%m-%dT%H:%M:%SZ")
+END=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+
+
 4. Métricas de utilización (90 días) - P95
 
 AzureMetrics
