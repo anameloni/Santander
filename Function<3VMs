@@ -1,4 +1,65 @@
-QUERY_SUM_RESPONSE_TIME (Modificada)
+COMANDO_SUM_RESPONSE_TIME_TODASFunction (ORIGINAL COPILOT_NTT)
+#!/bin/bash
+
+SUBSCRIPTIONS=(
+  "b755a5ef-8456-4576-b6bd-52da6ce030bc"
+  "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+)
+
+FECHA_INICIO="2026-06-05T00:00:00Z"
+FECHA_FIN="2026-06-08T23:59:59Z"
+
+for SUB in "${SUBSCRIPTIONS[@]}"; do
+
+    echo "=================================================="
+    echo "Suscripción: $SUB"
+    echo "=================================================="
+
+    az account set --subscription "$SUB"
+
+    az functionapp list \
+        --query "[].{name:name,resourceId:id}" \
+        -o tsv |
+    while IFS=$'\t' read -r FUNCTION_NAME RESOURCE_ID
+    do
+        echo ""
+        echo "Function App: $FUNCTION_NAME"
+
+        az monitor metrics list \
+            --resource "$RESOURCE_ID" \
+            --metric "HttpResponseTime" \
+            --aggregation "Average" \
+            --interval "P1D" \
+            --start-time "$FECHA_INICIO" \
+            --end-time "$FECHA_FIN" \
+            --output table
+
+    done
+
+done
+
+#identificar fácilmente a qué RG pertenece cada Function, puedes extraerlo del propio listado:
+az functionapp list \
+    --query "[].{name:name,rg:resourceGroup,id:id}" \
+    -o tsv |
+while IFS=$'\t' read -r FUNCTION_NAME RESOURCE_GROUP RESOURCE_ID
+do
+    echo "RG: $RESOURCE_GROUP | Function: $FUNCTION_NAME"
+
+    az monitor metrics list \
+        --resource "$RESOURCE_ID" \
+        --metric "HttpResponseTime" \
+        --aggregation "Average" \
+        --interval "P1D" \
+        --start-time "$FECHA_INICIO" \
+        --end-time "$FECHA_FIN" \
+        --output table
+done
+
+
+
+
+COMANDO_SUM_RESPONSE_TIME_1Function (Original_Tabla)
 
 # Variables de configuración
 RESOURCE_GROUP="gscd1weursgoe2020crit008"
