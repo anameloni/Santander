@@ -1,3 +1,60 @@
+1. Obtener el Resource ID de la Function App
+az functionapp show \
+  --name <FUNCTION_APP> \
+  --resource-group <RG> \
+  --query id -o tsv
+
+
+2. Listar las métricas disponibles para un tipo de recurso en el CLI:
+RESOURCE_ID=$(az functionapp show \
+  --name <FUNCTION_APP> \
+  --resource-group <RG> \
+  --query id -o tsv)
+
+az monitor metrics list-definitions \
+  --resource $RESOURCE_ID \
+  --output table
+
+3. Consultar MemoryWorkingSet
+az monitor metrics list \
+  --resource $RESOURCE_ID \
+  --metric MemoryWorkingSet \
+  --interval PT1H \
+  --start-time 2026-03-20T00:00:00Z \
+  --end-time 2026-06-18T00:00:00Z \
+  --aggregation Average Maximum
+```[1](https://learn.microsoft.com/en-us/cli/azure/monitor/metrics?view=azure-cli-latest)[3](https://github.com/MicrosoftDocs/azure-monitor-docs/blob/main/articles/azure-monitor/platform/rest-api-walkthrough.md)
+
+---
+
+### 4. Obtener promedio de memoria de los últimos 90 días
+
+```bash
+az monitor metrics list \
+  --resource $RESOURCE_ID \
+  --metric MemoryWorkingSet \
+  --interval P1D \
+  --start-time 2026-03-20T00:00:00Z \
+  --end-time 2026-06-18T00:00:00Z \
+  --aggregation Average
+```[1](https://learn.microsoft.com/en-us/cli/azure/monitor/metrics?view=azure-cli-latest)
+
+---
+
+### 5. Importante para Azure Functions Premium
+
+En muchos entornos de Azure Functions en **Elastic Premium**, la métrica de memoria no está disponible a nivel de **Function App**, sino a nivel de **App Service Plan (Microsoft.Web/serverfarms)**. [2](https://docs.azure.cn/en-us/app-service/monitor-app-service-reference)
+
+Obtén primero el plan:
+
+```bash
+az functionapp show \
+  --name <FUNCTION_APP> \
+  --resource-group <RG> \
+  --query serverFarmId \
+  -o tsv
+
+
 QUERY 18/06/2026 - MIGRAR PARA FLEX CONSUMPTION
 
 ✅ Migrar a Flex Consumption
