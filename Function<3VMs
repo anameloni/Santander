@@ -1,3 +1,26 @@
+QUERY_SUM_RESPONSE_TIME (Modificada)
+
+# Variables de configuración
+RESOURCE_GROUP="gscd1weursgoe2020crit008"
+FUNCTION_NAME="gscd1weuafaoe2020crit043"
+FECHA_INICIO="2026-06-05T00:00:00Z" # Formato ISO-8601
+FECHA_FIN="2026-06-08T23:59:59Z"
+
+# Obtener y calcular el promedio diario en segundos del ResponseTime
+az monitor metrics list \
+  --resource "/subscriptions/b755a5ef-8456-4576-b6bd-52da6ce030bc/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.Web/sites/$FUNCTION_NAME" \
+  --metric "HttpResponseTime" \
+  --aggregation "Average" \
+  --interval "P1D" \
+  --start-time "$FECHA_INICIO" \
+  --end-time "$FECHA_FIN"\
+  --output table \
+
+
+
+
+
+
 1. Obtener el Resource ID de la Function App
 az functionapp show \
   --name <FUNCTION_APP> \
