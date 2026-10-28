@@ -1,23 +1,27 @@
-let plans =
-resources
-| where type =~ 'microsoft.web/serverfarms'
-| project
-    AppServicePlanId = id,
-    AppServicePlanName = name,
-    Sku = tostring(sku.name),
-    Tier = tostring(sku.tier);
+inventario rápido de Functions Premium:
 
 resources
 | where type =~ 'microsoft.web/sites'
 | where kind contains 'functionapp'
 | extend AppServicePlanId = tostring(properties.serverFarmId)
-| join kind=leftouter plans on AppServicePlanId
+| extend AppServicePlanName = extract(@"serverfarms/([^/]+)$", 1, AppServicePlanId)
 | project
     FunctionApp = name,
-    ResourceGroup,
-    Location,
+    ResourceGroup = resourceGroup,
+    Location = location,
     AppServicePlanName,
-    Tier,
-    Sku,
     AppServicePlanId
-| order by FunctionApp asc
+
+
+
+
+Obtener el SKU de los planes por separado:
+
+resources
+| where type =~ 'microsoft.web/serverfarms'
+| project
+    AppServicePlanName = name,
+    Tier = tostring(sku.tier),
+    Sku = tostring(sku.name),
+    ResourceGroup = resourceGroup
+| order by AppServicePlanName asc
