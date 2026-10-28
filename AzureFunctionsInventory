@@ -1,0 +1,23 @@
+let plans =
+resources
+| where type =~ 'microsoft.web/serverfarms'
+| project
+    AppServicePlanId = id,
+    AppServicePlanName = name,
+    Sku = tostring(sku.name),
+    Tier = tostring(sku.tier);
+
+resources
+| where type =~ 'microsoft.web/sites'
+| where kind contains 'functionapp'
+| extend AppServicePlanId = tostring(properties.serverFarmId)
+| join kind=leftouter plans on AppServicePlanId
+| project
+    FunctionApp = name,
+    ResourceGroup,
+    Location,
+    AppServicePlanName,
+    Tier,
+    Sku,
+    AppServicePlanId
+| order by FunctionApp asc
